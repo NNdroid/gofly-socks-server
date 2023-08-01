@@ -1,0 +1,12 @@
+vTunSettings:
+  local_addr: ':10000'
+  key: 'demo_key'
+  protocol: ws
+  mtu: 1500
+  timeout: 30
+  buffer_size: 65535
+wsSettings:
+  path: /demo/path
+socksSettings:
+  mtu: 1500
+  proxy: 'socks5://192.168.100.159:10800'
