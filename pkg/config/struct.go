@@ -92,4 +92,7 @@ func (config *Config) setDefault() {
 	if config.Tun2SocksSettings.Device == "" {
 		config.Tun2SocksSettings.Device = "tun0"
 	}
+	if !config.RealitySettings.Debug {
+		config.RealitySettings.Debug = config.VTunSettings.Verbose
+	}
 }

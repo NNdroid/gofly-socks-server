@@ -218,7 +218,7 @@ func (x *Server) ToServer(conn net.Conn) {
 	var total int
 	for basic.ContextOpened(x.CTX) {
 		total = 0
-		n, err := conn.Read(header)
+		n, err := splitRead(conn, xproto.ClientSendPacketHeaderLength, header)
 		if err != nil {
 			logger.Logger.Sugar().Errorf("error, %v\n", err)
 			break
