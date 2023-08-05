@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"github.com/xjasonlyu/tun2socks/v2/core/device/iobased"
 	"gofly/pkg/device"
-	"sync"
 )
 
 const Driver = "tun"
@@ -22,9 +21,6 @@ type TUN struct {
 	mtu    uint32
 	name   string
 	offset int
-
-	rMutex sync.Mutex
-	wMutex sync.Mutex
 }
 
 var _rChan = make(chan []byte, 3000)
@@ -66,8 +62,6 @@ func Open(name string, mtu uint32) (_ device.Device, err error) {
 }
 
 func (t *TUN) Read(packet []byte) (int, error) {
-	t.rMutex.Lock()
-	defer t.rMutex.Unlock()
 	b := <-_wChan
 	n := len(b)
 	copy(packet[:n], b)
