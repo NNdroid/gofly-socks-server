@@ -5,6 +5,7 @@ import (
 	"github.com/patrickmn/go-cache"
 	"gofly/pkg/config"
 	"gofly/pkg/statistics"
+	"time"
 )
 
 type ServerForApi interface {
@@ -35,4 +36,8 @@ func (x *Server) ConvertDstAddr(packet []byte) {
 
 func (x *Server) ConvertSrcAddr(packet []byte) {
 	//
+}
+
+func GetTimeout() time.Time {
+	return time.Now().Add(time.Second * 3)
 }
