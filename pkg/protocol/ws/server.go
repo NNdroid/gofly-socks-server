@@ -84,7 +84,7 @@ func (x *Server) onWebsocket(w http.ResponseWriter, r *http.Request) {
 	if requestId := r.Header.Get(HTTP_REQUEST_ID_KEY); requestId != "" {
 		logger.Logger.Sugar().Debugf("request id: %s", requestId)
 		responseId := base64.RawURLEncoding.EncodeToString(xutils.RandomBytes(len(requestId)))
-		w.Header().Set(HTTP_RESPONSE_ID_KEY, responseId)
+		responseHeader.Set(HTTP_RESPONSE_ID_KEY, responseId)
 		logger.Logger.Sugar().Debugf("response id: %s", responseId)
 	}
 	upgrade := x.newUpgrade()
