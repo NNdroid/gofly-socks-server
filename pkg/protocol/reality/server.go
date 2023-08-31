@@ -216,9 +216,11 @@ func (x *Server) ToServer(conn net.Conn) {
 		return
 	}
 	var total int
+	var n int
+	var length int
 	for basic.ContextOpened(x.CTX) {
 		total = 0
-		n, err := splitRead(conn, xproto.ClientSendPacketHeaderLength, header)
+		n, err = splitRead(conn, xproto.ClientSendPacketHeaderLength, header)
 		if err != nil {
 			logger.Logger.Sugar().Errorf("error, %v\n", err)
 			break
@@ -237,7 +239,7 @@ func (x *Server) ToServer(conn net.Conn) {
 			logger.Logger.Sugar().Errorln("authentication failed")
 			break
 		}
-		length, err := splitRead(conn, ph.Length, packet[:ph.Length])
+		length, err = splitRead(conn, ph.Length, packet[:ph.Length])
 		if err != nil {
 			logger.Logger.Sugar().Errorf("error, %v\n", err)
 			break
@@ -263,10 +265,22 @@ func (x *Server) ToServer(conn net.Conn) {
 		if x.Config.VTunSettings.Obfs {
 			b = cipher.XOR(b)
 		}
-		x.ConvertSrcAddr(b)
-		x.WriteFunc(b)
-		x.Statistics.IncrReceivedBytes(total)
-		x.Statistics.IncrClientTransportBytes(conn.RemoteAddr(), total)
+		if dstKey := utils.GetDstKey(b); dstKey != "" {
+			if v, ok := x.ConnectionCache.Get(dstKey); ok && !x.Config.VTunSettings.ClientIsolation {
+				dstConn := v.(net.Conn)
+				_, err = dstConn.Write(b)
+				if err != nil {
+					logger.Logger.Sugar().Errorf("error, %v\n", err)
+					x.closeTheClient(dstConn, err)
+					continue
+				}
+			} else {
+				x.ConvertSrcAddr(b)
+				x.WriteFunc(b)
+				x.Statistics.IncrReceivedBytes(total)
+				x.Statistics.IncrClientTransportBytes(conn.RemoteAddr(), total)
+			}
+		}
 	}
 }
 

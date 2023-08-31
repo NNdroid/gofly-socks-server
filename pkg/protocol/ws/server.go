@@ -60,9 +60,17 @@ func (x *Server) newUpgrade() *websocket.Upgrader {
 			}
 			if key := utils.GetSrcKey(data); key != "" {
 				x.ConnectionCache.Set(key, c, 24*time.Hour)
-				x.ConvertSrcAddr(data)
-				x.WriteFunc(data)
-				x.Statistics.IncrClientTransportBytes(c.RemoteAddr(), n)
+				if dstKey := utils.GetDstKey(data); dstKey != "" {
+					if dstConn, ok := x.ConnectionCache.Get(dstKey); ok && !x.Config.VTunSettings.ClientIsolation {
+						if err := dstConn.(*websocket.Conn).WriteMessage(websocket.BinaryMessage, data); err != nil {
+							logger.Logger.Sugar().Errorf("try to write message error: %v\n", err)
+						}
+					} else {
+						x.ConvertSrcAddr(data)
+						x.WriteFunc(data)
+						x.Statistics.IncrClientTransportBytes(c.RemoteAddr(), n)
+					}
+				}
 			}
 		}
 	})
