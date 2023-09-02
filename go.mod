@@ -5,7 +5,7 @@ go 1.20
 require (
 	github.com/docker/go-units v0.5.0
 	github.com/gin-gonic/gin v1.9.1
-	github.com/golang/snappy v0.0.4
+	github.com/klauspost/compress v1.16.7
 	github.com/lesismal/llib v1.1.13
 	github.com/lesismal/nbio v1.3.17
 	github.com/patrickmn/go-cache v2.1.0+incompatible

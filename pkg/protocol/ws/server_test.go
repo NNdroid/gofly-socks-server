@@ -2,7 +2,7 @@ package ws
 
 import (
 	"encoding/hex"
-	"github.com/golang/snappy"
+	"github.com/klauspost/compress/snappy"
 	"github.com/patrickmn/go-cache"
 	"gofly/pkg/cipher"
 	"gofly/pkg/utils"

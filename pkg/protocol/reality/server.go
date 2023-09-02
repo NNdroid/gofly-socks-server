@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"github.com/golang/snappy"
 	"github.com/patrickmn/go-cache"
 	"github.com/xtls/reality"
 	"go.uber.org/zap"
@@ -15,7 +14,6 @@ import (
 	"gofly/pkg/logger"
 	"gofly/pkg/protocol/basic"
 	"gofly/pkg/utils"
-	"gofly/pkg/x/xcrypto"
 	"gofly/pkg/x/xproto"
 	"net"
 	"time"
@@ -120,6 +118,12 @@ func (x *Server) StartServerForApi() {
 		}
 		x.Statistics.Push(conn.RemoteAddr())
 		logger.Logger.Sugar().Debugf("accept connect: %s", conn.RemoteAddr().String())
+		err = x.HandshakeFromClient(conn, x.AuthKey())
+		if err != nil {
+			x.closeTheClient(conn, errors.New("active shutdown"))
+			logger.Logger.Sugar().Errorf("error, %v\n", err)
+			continue
+		}
 		go x.ToServer(conn)
 	}
 }
@@ -127,14 +131,11 @@ func (x *Server) StartServerForApi() {
 // ToClient sends packets from iFace to conn
 func (x *Server) ToClient() {
 	buffer := make([]byte, x.Config.VTunSettings.BufferSize)
-	xp := &xcrypto.XCrypto{}
-	err := xp.Init(x.Config.VTunSettings.Key)
-	if err != nil {
-		logger.Logger.Sugar().Errorf("error, %v\n", err)
-		return
-	}
+	var n int
+	var err error
+	var ns int
 	for basic.ContextOpened(x.CTX) {
-		n, err := x.ReadFunc(buffer)
+		n, err = x.ReadFunc(buffer)
 		if err != nil {
 			logger.Logger.Sugar().Errorf("error, %v\n", err)
 			continue
@@ -144,23 +145,18 @@ func (x *Server) ToClient() {
 		if key := utils.GetDstKey(b); key != "" {
 			if v, ok := x.ConnectionCache.Get(key); ok {
 				x.ConnectionCache.Set(key, v, 15*time.Minute)
-				if x.Config.VTunSettings.Obfs {
-					b = cipher.XOR(b)
-				}
-				b, err = xp.Encode(b)
+				conn := v.(net.Conn)
+				b, err = x.ExtendEncode(b)
 				if err != nil {
-					logger.Logger.Sugar().Errorf("error, %v\n", err)
-					break
-				}
-				if x.Config.VTunSettings.Compress {
-					b = snappy.Encode(nil, b)
+					logger.Logger.Sugar().Errorf("encode error, %v\n", err)
+					x.closeTheClient(conn, err)
+					continue
 				}
 				ph := &xproto.ServerSendPacketHeader{
 					ProtocolVersion: xproto.ProtocolVersion,
 					Length:          len(b),
 				}
-				conn := v.(net.Conn)
-				ns, err := conn.Write(xproto.Merge(ph.Bytes(), b))
+				ns, err = conn.Write(xproto.Merge(ph.Bytes(), b))
 				if err != nil {
 					logger.Logger.Sugar().Errorf("error, %v\n", err)
 					x.ConnectionCache.Delete(key)
@@ -203,21 +199,10 @@ func (x *Server) ToServer(conn net.Conn) {
 	defer x.closeTheClient(conn, errors.New("active shutdown"))
 	header := make([]byte, xproto.ClientSendPacketHeaderLength)
 	packet := make([]byte, x.Config.VTunSettings.BufferSize)
-	authKey := xproto.ParseAuthKeyFromString(x.Config.VTunSettings.Key)
-	xp := &xcrypto.XCrypto{}
-	err := xp.Init(x.Config.VTunSettings.Key)
-	if err != nil {
-		logger.Logger.Sugar().Errorf("error, %v\n", err)
-		return
-	}
-	err = x.HandshakeFromClient(conn, authKey)
-	if err != nil {
-		logger.Logger.Sugar().Errorf("error, %v\n", err)
-		return
-	}
+	var err error
 	var total int
-	var n int
 	var length int
+	var n int
 	for basic.ContextOpened(x.CTX) {
 		total = 0
 		n, err = splitRead(conn, xproto.ClientSendPacketHeaderLength, header)
@@ -235,7 +220,7 @@ func (x *Server) ToServer(conn net.Conn) {
 			logger.Logger.Sugar().Errorln("ph == nil")
 			break
 		}
-		if !ph.Key.Equals(authKey) {
+		if !ph.Key.Equals(x.AuthKey()) {
 			logger.Logger.Sugar().Errorln("authentication failed")
 			break
 		}
@@ -250,20 +235,10 @@ func (x *Server) ToServer(conn net.Conn) {
 		}
 		total += length
 		b := packet[:length]
-		if x.Config.VTunSettings.Compress {
-			b, err = snappy.Decode(nil, b)
-			if err != nil {
-				logger.Logger.Sugar().Errorf("error, %v\n", err)
-				break
-			}
-		}
-		b, err = xp.Decode(b)
+		b, err = x.ExtendDecode(b)
 		if err != nil {
-			logger.Logger.Sugar().Errorf("error, %v\n", err)
+			logger.Logger.Sugar().Errorf("decode error, %v\n", err)
 			break
-		}
-		if x.Config.VTunSettings.Obfs {
-			b = cipher.XOR(b)
 		}
 		if dstKey := utils.GetDstKey(b); dstKey != "" {
 			if v, ok := x.ConnectionCache.Get(dstKey); ok && !x.Config.VTunSettings.ClientIsolation {
